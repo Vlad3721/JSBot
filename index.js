@@ -1,10 +1,12 @@
 const fs = require('fs');
 const cron = require("node-cron");
 
+//Инициализация базы данных
 let data_base = {};
 let DATE = new Date();
 data_base = JSON.parse(fs.readFileSync('DATA_BASE.json'));
 
+//Инициализация телеграмм-бота
 const TelegramBot = require('node-telegram-bot-api');
 const token = data_base["tech_data"]["bot_token"];
 const bot = new TelegramBot(token,{polling:true});
@@ -265,7 +267,7 @@ bot.on('message', (msg) => {
 			let id = Number(enterData[1]);
 			if (!Number.isNaN(id)) {
 				data_base["tech_data"]["usData"][id]["dialogMode"] = 0;
-				bot.sendMessage(data_base["tech_data"]["adminId"], "Диалоговый режим выключён для пользователя " + id);
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Диалоговый режим выключен для пользователя " + id);
 			}
 			else {
 				bot.sendMessage(data_base["tech_data"]["adminId"], "Неверный формат данных");
