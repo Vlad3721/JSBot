@@ -11,7 +11,6 @@ const bot = new TelegramBot(token,{polling:true});
 
 const modeMax = 1;
 const userModes = ["обычный","заметочный"];
-const botModes = ["штатный","диалоговый"];
 
 //Отправка уведомления о заметках
 cron.schedule("1 0,6,12,18 * * *",() => {
@@ -30,6 +29,7 @@ cron.schedule("1 0,6,12,18 * * *",() => {
 		}
 });
 
+//Функция отправки начальной информации
 function beginInfo() {
 	let str = "Зафиксировано включение бота";
 	for (let key in data_base["tech_data"]) {
@@ -40,6 +40,7 @@ function beginInfo() {
 	bot.sendMessage(data_base["tech_data"]["adminId"],str);
 }
 
+//Функция поиска объекта в базе данных по путю
 function objFromDataBase(str) {
 	let arr = str;
 	let dataBaseQuery = {};
@@ -79,6 +80,7 @@ function objFromDataBase(str) {
 	}
 }
 
+//Расшифрофка команд
 function comDone(arr) {
 	let m = 0;
 	let element = {};
@@ -114,10 +116,29 @@ function comDone(arr) {
 	return element;
 }
 
+//Исключения для обычного режима
 function exeptionNormalMode(ms) {
-	if ((data_base["tech_data"]["MODE"] === 1) && ((ms.chat.id === data_base["tech_data"]["adminId"]) || (ms.chat.id === data_base["tech_data"]["dialogUserId"])))
-		return true;
-	return false;
+	if (data_base["tech_data"]["usData"][ms.chat.id]["dialogMode"] === 1) {
+		let cId = data_base["tech_data"]["usData"][ms.chat.id]["dialogUsId"];
+		if (cId in data_base["tech_data"]["usData"]) {
+			if (data_base["tech_data"]["usData"][cId]["dialogMode"] === 1) {
+				if (data_base["tech_data"]["usData"][cId]["dialogUsId"] === ms.chat.id) {
+					return 1;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+//Сохранение данных в базу данных
+function saveInDataBase() {
+	fs.writeFile('DATA_BASE.json',"", (err) => {
+		if (err) throw err;
+	});
+	fs.writeFile('DATA_BASE.json', JSON.stringify(data_base,undefined,2), (err) => {
+		if (err) throw err;
+	});
 }
 
 beginInfo();
@@ -133,6 +154,8 @@ bot.on('message', (msg) => {
 			name:msg.chat.first_name,
 			lastname:msg.chat.last_name,
 			mode:0,
+			dialogMode: 0,
+			dialogUsId: 0,
 			history:[],
 			alert:1,
 			tags:[],
@@ -143,9 +166,7 @@ bot.on('message', (msg) => {
 															JSON.stringify(data_base["tech_data"]["usData"][chatId],undefined,2));
 		}
 
-		fs.writeFile('DATA_BASE.json', JSON.stringify(data_base,undefined,2), (err) => {
-			if (err) throw err;
-		});
+		saveInDataBase();
 	}
 
 	//Запись сообщений в историю сообщений
@@ -155,37 +176,13 @@ bot.on('message', (msg) => {
 		date:DATE,
 	});
 	//Сохранение данных в базу данных
-	fs.writeFile('DATA_BASE.json', JSON.stringify(data_base,undefined,2), (err) => {
-		if (err) throw err;
-	});
+	saveInDataBase();
 
 	//Административные команды
 	if (chatId === data_base["tech_data"]["adminId"]) {
 		let comFound = 0;
-		//Смена режима работы на диалоговый
-		if (enterData[0] === 'ChatMode') {
-			data_base["tech_data"]["MODE"] = 1;
-			bot.sendMessage(data_base["tech_data"]["adminId"], "Режим бота: диалоговый");
-			if (!Number.isNaN(Number(enterData[1]))) {
-				data_base["tech_data"]["dialogUserId"] = Number(enterData[1]);
-			}
-			bot.sendMessage(data_base["tech_data"]["adminId"],"Пользователь для общения: "+data_base["tech_data"]["dialogUserId"]);
-			comFound = 1;
-		}
-		//Смена режима работы на штатный
-		else if (enterData[0] === 'StateMode') {
-			data_base["tech_data"]["MODE"] = 0;
-			bot.sendMessage(data_base["tech_data"]["adminId"], "Режим бота: штатный");
-
-			comFound = 1;
-		}
-		//Режим работы в данный момент
-		else if (enterData[0] === 'Mode') {
-			bot.sendMessage(data_base["tech_data"]["adminId"], "Режим бота: "+botModes[data_base["tech_data"]["MODE"]]);
-			comFound = 1;
-		}
 		//Обновление базы данных
-		else if (enterData[0] === 'BasaUpdate') {
+		if (enterData[0] === 'BasaUpdate') {
 			data_base = JSON.parse(fs.readFileSync('DATA_BASE.json'));
 			bot.sendMessage(data_base["tech_data"]["adminId"], "Данные обновлены");
 			comFound = 1;
@@ -237,12 +234,50 @@ bot.on('message', (msg) => {
 			}
 			comFound = 1;
 		}
+		//Создание нового чата для диалогового режима
+		else if (enterData[0] === 'NewChat') {
+			let id_0 = Number(enterData[1]);
+			let id_1 = Number(enterData[2]);
+			if (!Number.isNaN(id_0) && !Number.isNaN(id_1)) {
+				data_base["tech_data"]["usData"][id_0]["dialogUsId"] = id_1;
+				data_base["tech_data"]["usData"][id_1]["dialogUsId"] = id_0;
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Чат создан");
+			}
+			else {
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Неверный формат данных");
+			}
+			comFound = 1;
+		}
+		//Включение диалогового режима для указаного пользователя
+		else if (enterData[0] === 'chatActive') {
+			let id = Number(enterData[1]);
+			if (!Number.isNaN(id)) {
+				data_base["tech_data"]["usData"][id]["dialogMode"] = 1;
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Диалоговый режим включён для пользователя " + id);
+			}
+			else {
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Неверный формат данных");
+			}
+			comFound = 1;
+		}
+		//Выключение диалогового режима для указаного пользователя
+		else if (enterData[0] === 'chatDiactive') {
+			let id = Number(enterData[1]);
+			if (!Number.isNaN(id)) {
+				data_base["tech_data"]["usData"][id]["dialogMode"] = 0;
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Диалоговый режим выключён для пользователя " + id);
+			}
+			else {
+				bot.sendMessage(data_base["tech_data"]["adminId"], "Неверный формат данных");
+			}
+			comFound = 1;
+		}
 		//Включение административной клавиатуры
 		else if (enterData[0] === "Keyboard") {
 			bot.sendMessage(data_base["tech_data"]["adminId"],"Активация административной клавиатуры",{
 				"reply_markup": {
 					"keyboard": [
-						["StateMode","ChatMode","Mode"],
+						["NewChat","chatActive","chatDiactive"],
 						["BasaUpdate","Database usInfo","Database detSearch","Database historyClear"],
 						["AddAlert on","AddAlert off"]
 					]
@@ -252,9 +287,7 @@ bot.on('message', (msg) => {
 		}
 
 		if (comFound === 1) {
-			fs.writeFile('DATA_BASE.json', JSON.stringify(data_base,undefined,2), (err) => {
-				if (err) throw err;
-			});
+			saveInDataBase();
 			return;
 		}
 	}
@@ -283,9 +316,9 @@ bot.on('message', (msg) => {
 			"\n";
 		if (chatId === data_base["tech_data"]["adminId"]) {
 			str = str + "\nАдминистративные команды:"+
-						"\nChatMode [id человека для общения] - переключение бота в диалоговый режим"+
-						"\nStateMode - переключение бота в штатный режим"+
-						"\nMode - запрос нынешнего режима"+
+						"\nNewChat [id первого пользователя] [id второго пользователя] - создание чата для двух пользователей"+
+						"\nchatActive [id пользователя] - включение диалогового режима для указаного пользователя"+
+						"\nchatDiactive [id пользователя] - выключение диалогового режима для указаного пользователя"+
 						"\nBasaUpdate - обновление базы данных в соответствии с файлом"+
 						"\nDatabase detSearch [путь к файлу] - поиск файлов в базе данных по пути"+
 						"\nDatabase usInfo - краткая информация о всех пользователях в базе данных"+
@@ -312,7 +345,7 @@ bot.on('message', (msg) => {
 	}
 
 	//Работа в обычном режиме бота
-	if (!exeptionNormalMode(msg)) {
+	if (exeptionNormalMode(msg) === 0) {
 
 		//Вывод нынешнего режима пользователя
 		if (text === '/mode') {
@@ -425,17 +458,13 @@ bot.on('message', (msg) => {
 		}
 	}
 	//Работа в диалоговом режиме бота
-	else if ((data_base["tech_data"]["MODE"] === 1) && ((chatId === data_base["tech_data"]["adminId"]) || (chatId === data_base["tech_data"]["dialogUserId"]))) {
-		if (chatId === data_base["tech_data"]["adminId"]) {
-			bot.sendMessage(data_base["tech_data"]["dialogUserId"],text);
-		}
-		else if (chatId === data_base["tech_data"]["dialogUserId"]) {
-			bot.sendMessage(data_base["tech_data"]["adminId"],msg.chat.first_name+":\n"+text);
-		}
+	else if (exeptionNormalMode(msg) === 1) {
+		if (chatId === data_base["tech_data"]["adminId"])
+			bot.sendMessage(data_base["tech_data"]["usData"][chatId]["dialogUsId"],text);
+		else
+			bot.sendMessage(data_base["tech_data"]["usData"][chatId]["dialogUsId"],msg.chat.first_name+"\n"+text);
 	}
 
 	//Сохранение данных в базу данных
-	fs.writeFile('DATA_BASE.json', JSON.stringify(data_base,undefined,2), (err) => {
-		if (err) throw err;
-	});
+	saveInDataBase();
 });
