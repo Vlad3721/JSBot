@@ -1,16 +1,17 @@
 const fs = require('fs');
 const cron = require("node-cron");
 
+let data_base = {};
+let DATE = new Date();
+data_base = JSON.parse(fs.readFileSync('DATA_BASE.json'));
+
 const TelegramBot = require('node-telegram-bot-api');
-const token = '5323501726:AAGcGW2dDwiaKLfUdRiO1u2NvJiAkg5YLI8';
+const token = data_base["tech_data"]["bot_token"];
 const bot = new TelegramBot(token,{polling:true});
 
 const modeMax = 1;
 const userModes = ["обычный","заметочный"];
 const botModes = ["штатный","диалоговый"];
-let data_base = {};
-let DATE = new Date();
-data_base = JSON.parse(fs.readFileSync('DATA_BASE.json'));
 
 //Отправка уведомления о заметках
 cron.schedule("1 0,6,12,18 * * *",() => {
@@ -32,7 +33,7 @@ cron.schedule("1 0,6,12,18 * * *",() => {
 function beginInfo() {
 	let str = "Зафиксировано включение бота";
 	for (let key in data_base["tech_data"]) {
-		if (key !== "usData") {
+		if ((key !== "usData") && (key !== "bot_token")) {
 			str = str+"\n"+key+": "+data_base["tech_data"][key];
 		}
 	}
