@@ -1,4 +1,4 @@
-# Rep_0
+# JSBot
 Также в корневой папке должны присутствовать node_modules и файл DATA_BASE.json. Структура DATA_BASE.json: {
   "tech_data": {
     "usData": {},
